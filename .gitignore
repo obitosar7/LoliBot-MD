@@ -7,3 +7,4 @@ BotSession/
 jadibot/
 src/ 
 tmp/
+database.json
