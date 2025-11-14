@@ -1,33 +1,31 @@
 import { createHash } from 'crypto';
 import axios from 'axios';
+import { db as database } from '../lib/postgres.js';
 
-let Reg = /(.*)[.|] ?([0-9]+)$/i;
+const Reg = /(.*)[.|] ?([0-9]+)$/i;
 
-let handler = async function (m, { conn, text, usedPrefix, command }) {
-  text = text || '';
-
-  // Ensure the database structure exists so registration does not crash on startup
-  global.db = global.db || { data: {} };
-  global.db.data = global.db.data || {};
-  global.db.data.users = global.db.data.users || {};
-
-  if (!global.db.data.users[m.sender]) {
-    global.db.data.users[m.sender] = {
-      registered: false,
-      name: '',
-      age: 0,
-      regTime: 0,
-      bank: 0,
-      warn: 0,
-      premium: false
-    };
+const handler = async function (m, { conn, text = '', usedPrefix, command }) {
+  const db = m.db && typeof m.db.query === 'function' ? m.db : database;
+  if (!db || typeof db.query !== 'function') {
+    throw '⚠️ قاعدة البيانات غير متاحة حاليًا. حاول لاحقًا.';
   }
 
-  let user = global.db.data.users[m.sender];
-  let name2 = conn.getName(m.sender);
+  const name2 = await conn.getName(m.sender).catch(() => m.pushName || 'مستخدم');
+  let user = (await db.query('SELECT * FROM usuarios WHERE id = $1', [m.sender])).rows[0];
+
+  if (!user) {
+    const inserted = await db.query(
+      `INSERT INTO usuarios (id, nombre, num, registered)
+       VALUES ($1, $2, $3, false)
+       ON CONFLICT (id) DO NOTHING
+       RETURNING *`,
+      [m.sender, m.pushName || 'sin name', m.sender.split('@')[0]]
+    );
+    user = inserted.rows[0] || (await db.query('SELECT * FROM usuarios WHERE id = $1', [m.sender])).rows[0];
+  }
 
   if (command === 'الغاء_التسجيل' || command === 'unreg') {
-    if (!user.registered) {
+    if (!user?.registered) {
       await m.reply('❌ لم تقم بالتسجيل بعد.');
       return;
     }
@@ -36,15 +34,17 @@ let handler = async function (m, { conn, text, usedPrefix, command }) {
       await m.reply(`⚠️ الرقم التسلسلي غير صحيح.\n\n📌 استخدم هذا الأمر:\n*${usedPrefix}unreg* <الرقم التسلسلي>\n\n🔑 الرقم التسلسلي الخاص بك:\n${sn}`);
       return;
     }
-    delete user.name;
-    delete user.age;
-    delete user.regTime;
-    user.registered = false;
+    await db.query(
+      `UPDATE usuarios
+       SET nombre = $1, edad = NULL, reg_time = NULL, serial_number = NULL, registered = false
+       WHERE id = $2`,
+      ['sin name', m.sender]
+    );
     await m.reply('✅ تم إلغاء تسجيلك بنجاح.');
     return;
   }
 
-  if (user.registered === true) {
+  if (user?.registered) {
     throw `✳️ لقد قمت بالتسجيل بالفعل.\n\nهل ترغب في إعادة التسجيل؟\n\n📌 استخدم هذا الأمر لحذف تسجيلك:\n*${usedPrefix}unreg* <الرقم التسلسلي>`;
   }
 
@@ -61,11 +61,16 @@ let handler = async function (m, { conn, text, usedPrefix, command }) {
   if (age > 100) throw '👴🏻 يبدو أن شخصًا مسنًا يريد اللعب مع البوت!';
   if (age < 5) throw '🚼 صغير جدًا للعب مع البوت!';
 
-  user.name = name.trim();
-  user.age = age;
-  user.regTime = +new Date();
-  user.registered = true;
   let sn = createHash('md5').update(m.sender).digest('hex');
+
+  const updateRes = await db.query(
+    `UPDATE usuarios
+     SET nombre = $1, edad = $2, reg_time = NOW(), serial_number = $3, registered = true
+     WHERE id = $4
+     RETURNING *`,
+    [name.trim(), age, sn, m.sender]
+  );
+  user = updateRes.rows[0] || user;
 
   let txt = `
 ╭─「 تسجيل ناجح! 」 
@@ -76,9 +81,9 @@ let handler = async function (m, { conn, text, usedPrefix, command }) {
 │    ${sn} 
 │ شكرًا لتسجيلك 
 │📂 استخدم ${usedPrefix}menu لرؤية قائمة الأوامر. 
-│🔒 رصيد: ${user.bank} ذهب 
-│⚠️ التحذيرات: ${user.warn} 
-│🌟 مميز: ${user.premium ? 'نعم' : 'لا'} 
+│🔒 رصيد: ${user?.banco ?? 0} ذهب 
+│⚠️ التحذيرات: ${user?.warn ?? 0} 
+│🌟 مميز: ${(user?.premium ?? false) ? 'نعم' : 'لا'} 
 ╰─「──────────────」
 `.trim();
 
