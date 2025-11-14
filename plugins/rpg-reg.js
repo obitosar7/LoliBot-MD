@@ -1,5 +1,4 @@
 import { createHash } from 'crypto';
-import axios from 'axios';
 
 let Reg = /(.*)[.|] ?([0-9]+)$/i;
 
@@ -64,8 +63,7 @@ let handler = async function (m, { conn, text, usedPrefix, command }) {
 ╰─「──────────────」
 `.trim();
 
-  const url = "https://files.catbox.moe/v23rau.mp4";
-  const responseVideo = await axios.get(url, { responseType: 'arraybuffer' });
+  const videoUrl = 'https://files.catbox.moe/v23rau.mp4';
 
   let fkontak = {
     key: {
@@ -87,7 +85,11 @@ END:VCARD`
     }
   };
 
-  await conn.sendMessage(m.chat, { video: responseVideo.data, caption: txt, gifPlayback: true }, { quoted: fkontak });
+  await conn.sendMessage(
+    m.chat,
+    { video: { url: videoUrl }, caption: txt, gifPlayback: true },
+    { quoted: fkontak }
+  );
   await m.react("✅");
 };
 
