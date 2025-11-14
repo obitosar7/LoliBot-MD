@@ -1,4 +1,5 @@
 import { createHash } from 'crypto';
+import axios from 'axios';
 
 let Reg = /(.*)[.|] ?([0-9]+)$/i;
 
@@ -64,6 +65,13 @@ let handler = async function (m, { conn, text, usedPrefix, command }) {
 `.trim();
 
   const videoUrl = 'https://files.catbox.moe/v23rau.mp4';
+  let videoPayload = null;
+  try {
+    const responseVideo = await axios.get(videoUrl, { responseType: 'arraybuffer' });
+    videoPayload = responseVideo?.data || null;
+  } catch (error) {
+    console.error('Failed to download registration video:', error);
+  }
 
   let fkontak = {
     key: {
@@ -85,11 +93,11 @@ END:VCARD`
     }
   };
 
-  await conn.sendMessage(
-    m.chat,
-    { video: { url: videoUrl }, caption: txt, gifPlayback: true },
-    { quoted: fkontak }
-  );
+  const messageOptions = videoPayload
+    ? { video: videoPayload, caption: txt, gifPlayback: true }
+    : { video: { url: videoUrl }, caption: txt, gifPlayback: true };
+
+  await conn.sendMessage(m.chat, messageOptions, { quoted: fkontak });
   await m.react("✅");
 };
 
