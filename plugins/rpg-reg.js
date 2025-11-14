@@ -5,6 +5,24 @@ let Reg = /(.*)[.|] ?([0-9]+)$/i;
 
 let handler = async function (m, { conn, text, usedPrefix, command }) {
   text = text || '';
+
+  // Ensure the database structure exists so registration does not crash on startup
+  global.db = global.db || { data: {} };
+  global.db.data = global.db.data || {};
+  global.db.data.users = global.db.data.users || {};
+
+  if (!global.db.data.users[m.sender]) {
+    global.db.data.users[m.sender] = {
+      registered: false,
+      name: '',
+      age: 0,
+      regTime: 0,
+      bank: 0,
+      warn: 0,
+      premium: false
+    };
+  }
+
   let user = global.db.data.users[m.sender];
   let name2 = conn.getName(m.sender);
 
